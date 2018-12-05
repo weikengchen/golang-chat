@@ -8,66 +8,86 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
+	"strconv"
 )
 
 const (
-	CONN_HOST = "localhost"
+	CONN_HOST = "52.53.139.26"
 	CONN_PORT = "3333"
 	CONN_TYPE = "tcp"
 )
 
 func main() {
+	fmt.Print("Enter the size of the packet to receive: ")
+	// Read the data size
+	reader := bufio.NewReader(os.Stdin)
+	datasize_str, err := reader.ReadString('\n')
+	datasize_str = datasize_str[:len(datasize_str) - 1]
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	datasize, err := strconv.Atoi(datasize_str)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Print("Enter the number of connections to make: ")
+	// Read the number of connections to make
+	reader = bufio.NewReader(os.Stdin)
+	testnum_str, err := reader.ReadString('\n')
+	testnum_str = testnum_str[:len(testnum_str) - 1]
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	testnum, err := strconv.Atoi(testnum_str)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	tcpAddr, err := net.ResolveTCPAddr("tcp", CONN_HOST+":"+CONN_PORT)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Connect to server through tcp.
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-	go printOutput(conn)
-	writeInput(conn)
-}
-
-func writeInput(conn *net.TCPConn) {
-	fmt.Print("Enter username: ")
-	// Read from stdin.
-	reader := bufio.NewReader(os.Stdin)
-	username, err := reader.ReadString('\n')
-	username = username[:len(username)-1]
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("Enter text: ")
-	for {
-		text, err := reader.ReadString('\n')
+	start := time.Now()
+	for i := 0; i < testnum; i++ {
+		conn, err := net.DialTCP("tcp", nil, tcpAddr)
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = common.WriteMsg(conn, username+": "+text)
-		if err != nil {
-			log.Println(err)
+
+		writeInput(conn, datasize)
+
+		for {
+			msg, err := common.ReadMsg(conn)
+			// Receiving EOF means the data has been sent
+			if err == io.EOF {
+				conn.Close()
+
+				break
+			}
+
+			if err != nil {
+				log.Fatal(err)
+			}
+			_ = msg
 		}
+
+		conn.Close()
+	}
+	end := time.Now()
+	fmt.Printf("Time taken: %s\n", end.Sub(start))
+}
+
+func writeInput(conn *net.TCPConn, datasize int) {
+	datasize_str := strconv.Itoa(datasize)
+
+	err := common.WriteMsg(conn, datasize_str)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
-func printOutput(conn *net.TCPConn) {
-	for {
-
-		msg, err := common.ReadMsg(conn)
-		// Receiving EOF means that the connection has been closed
-		if err == io.EOF {
-			// Close conn and exit
-			conn.Close()
-			fmt.Println("Connection Closed. Bye bye.")
-			os.Exit(0)
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(msg)
-	}
-}
